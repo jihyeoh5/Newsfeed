@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>MS Society Newsfeed</title>
+	<style type = "text/css">
+	li {
+		list-style: none;
+	}
+	#myBody {
+		line-height: 1;
+	}
+	</style>
+	<Sharepoint:ScriptLink runat="server" Name="SP.js" Localizable="false"  ID="s1" LoadAfterUI="true"/>
+	<Sharepoint:ScriptLink runat="server" Name="SP.Runtime.js" Localizable="false"  ID="s2" LoadAfterUI="true"/>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+	<script>
+	window.onload = function() {
+		var collListItem;
+		function retrieveListItems() {
+			var clientContext = new SP.ClientContext.get_current();
+		  var oList = clientContext.get_web().get_lists().getByTitle("News");
+		  var camlQuery = new SP.CamlQuery();
+			camlQuery.set_viewXml('<View><Query><Where><Geq><FieldRef Name=\'ID\'/>' +
+				'<Value Type=\'Number\'>1</Value></Geq></Where></Query><RowLimit>10</RowLimit></View>');
+		  collListItem = oList.getItems(camlQuery);
+		  clientContext.load(collListItem, 'Include(Link,ArchiveDate,Body)'); //Expires
+			clientContext.executeQueryAsync(onQuerySucceeded,onQueryFailed);
+		}
+
+		function onQuerySucceeded(sender,args) {
+			var listItemInfo='';
+		  var listItemEnumerator = collListItem.getEnumerator();
+			var html = "";
+			i=1;
+		  while (listItemEnumerator.moveNext()){
+				var oListItem = listItemEnumerator.get_current();
+				var todayDate = new Date();
+				//var expireDate = oListItem.get_item("Expires");
+				var archiveDate = oListItem.get_item("ArchiveDate");
+				tryArchiveDate = archiveDate.getTime();
+				var statement = archiveDate.getTime() > todayDate.getTime();
+				/*try { //get expiry date
+				var expiredPresent = "1";
+				tryExpireDate = expireDate.getTime(); }
+				catch(err) { //if no expiry date, check for archive date
+					expiredPresent = "0";
+					try {
+						tryArchiveDate = archiveDate.getTime();}
+					catch(err) {
+						continue; //Don't display items without expiry/archive date
+					}
+				}
+				if (expiredPresent == "1") {
+					var statement = expireDate.getTime() > todayDate.getTime();
+				}
+				else {
+					var statement = archiveDate.getTime() > todayDate.getTime();
+				}*/
+				if (statement == true) { //if expiry date not past, write to list and print to window
+					var newTitle = oListItem.get_item('Link').get_description();
+					var hyperlink = oListItem.get_item("Link").get_url();
+					var newBody = oListItem.get_item('Body');
+					newBodyString = String(newBody);
+					while (newBodyString.indexOf("<") != -1) {
+						firstIndex = newBodyString.indexOf("<");
+						lastIndex = newBodyString.indexOf(">");
+						newBodyString = newBodyString.replace(newBodyString.substring(firstIndex,lastIndex+1), "");}
+					newBodyString = newBodyString.substr(0,300);
+					html+="<li id="+String(i)+"><b><a href='"+hyperlink+"'>"+newTitle+"</a></b><p>"+newBodyString+"</p><br></li>"
+					//listItemInfo += '\nTitle: ' + oListItem.get_item('Title');
+				}
+				i+=1;
+			}
+			var maxItem = i-1; //6
+			var j=1;
+			function changeDisplay() {
+				var beginning = html.split("<li",j).join("<li").length;
+				var str="</li>";
+				var end;
+				var length;
+				titleList.style.display = "none";
+				if (j==maxItem-1){
+					titleList.innerHTML = html.substr(beginning,html.length)+html.substr(0,html.indexOf("</li>")+str.length);
+				} else if (j==maxItem) {
+					end = html.split("</li>",2).join("</li>").length;
+					titleList.innerHTML = html.substr(beginning,html.length)+html.substr(0,end+str.length)
+				} else {
+					end = html.split("</li>",j+2).join("</li>").length;
+					length = end - beginning;
+					titleList.innerHTML = html.substr(beginning,length+str.length);
+				}
+				$("#titleList").fadeIn(600);
+				j+=1;
+				if (j>maxItem) {
+					j=1;
+				}
+				setTimeout(changeDisplay,4000);
+			}
+			changeDisplay();
+		}
+
+		function onQueryFailed(sender,args) {
+			alert('Request failed.');
+		}
+		SP.SOD.executeOrDelayUntilScriptLoaded(retrieveListItems,"sp.js");}
+	</script>
+</head>
+
+<body>
+	<header>
+	</header>
+	<main id="myBody">
+		<ul id="titleList"></ul>
+	</main>
+	<footer>
+	</footer>
+</body>
+</html>
