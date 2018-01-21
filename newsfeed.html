@@ -4,6 +4,7 @@
 	<meta charset="utf-8">
 	<title>MS Society Newsfeed</title>
 	<style type = "text/css">
+	/*Remove bullets in bulleted list and adjust line spacing*/
 	li {
 		list-style: none;
 	}
@@ -18,90 +19,90 @@
 	window.onload = function() {
 		var collListItem;
 		function retrieveListItems() {
-			var clientContext = new SP.ClientContext.get_current();
+			//Connect to Communications SharePoint Site's list called "News"
+			var clientContext = new SP.ClientContext("https://mssocietyofcanadaprod.sharepoint.com/en-ca/departments/comm");
 		  var oList = clientContext.get_web().get_lists().getByTitle("News");
 		  var camlQuery = new SP.CamlQuery();
-			camlQuery.set_viewXml('<View><Query><Where><Geq><FieldRef Name=\'ID\'/>' +
-				'<Value Type=\'Number\'>1</Value></Geq></Where></Query><RowLimit>10</RowLimit></View>');
+			//Retrieve items in list in descending order of PublishDate
+			camlQuery.set_viewXml('<View><Query><OrderBy><FieldRef Name="PublishDate" Ascending="False" /></OrderBy></Query></View>');
 		  collListItem = oList.getItems(camlQuery);
-		  clientContext.load(collListItem, 'Include(Link,ArchiveDate,Body)'); //Expires
+			//Grab values from the following list of columns
+		  clientContext.load(collListItem, 'Include(Link,ArchiveDate,Body,PublishDate)');
 			clientContext.executeQueryAsync(onQuerySucceeded,onQueryFailed);
 		}
 
+		//If the query succeeded, execute the following function
 		function onQuerySucceeded(sender,args) {
-			var listItemInfo='';
 		  var listItemEnumerator = collListItem.getEnumerator();
+			var listItemInfo='';
 			var html = "";
 			i=1;
+			//Loop through each list item queried from the function retrieveListItems()
 		  while (listItemEnumerator.moveNext()){
 				var oListItem = listItemEnumerator.get_current();
 				var todayDate = new Date();
-				//var expireDate = oListItem.get_item("Expires");
+				//Reformat Publish Date to user-friendly format i.e. MMM-DD-YYYY
+				var publishDate = oListItem.get_item("PublishDate");
+				var publishDateString = String(publishDate);
+				var publishDateArray = publishDateString.split(" ");
+				if (publishDateArray[3] == "00:00:00") { //Accomodate IE11 as its time is formatted differeintly from Chrome
+					publishDateArray[3] = "2017";}
+				var formatPublishDate = publishDateArray.slice(1,4).join('-');
+				//Check whether Archive Date has not past
 				var archiveDate = oListItem.get_item("ArchiveDate");
 				tryArchiveDate = archiveDate.getTime();
 				var statement = archiveDate.getTime() > todayDate.getTime();
-				/*try { //get expiry date
-				var expiredPresent = "1";
-				tryExpireDate = expireDate.getTime(); }
-				catch(err) { //if no expiry date, check for archive date
-					expiredPresent = "0";
-					try {
-						tryArchiveDate = archiveDate.getTime();}
-					catch(err) {
-						continue; //Don't display items without expiry/archive date
-					}
-				}
-				if (expiredPresent == "1") {
-					var statement = expireDate.getTime() > todayDate.getTime();
-				}
-				else {
-					var statement = archiveDate.getTime() > todayDate.getTime();
-				}*/
-				if (statement == true) { //if expiry date not past, write to list and print to window
+				//If Archive Date has not past, grab the item's "Body," and hyperlink. display text of "Link"
+				if (statement == true) {
 					var newTitle = oListItem.get_item('Link').get_description();
 					var hyperlink = oListItem.get_item("Link").get_url();
 					var newBody = oListItem.get_item('Body');
 					newBodyString = String(newBody);
+					//Remove any HTML tags in the newBody string
 					while (newBodyString.indexOf("<") != -1) {
 						firstIndex = newBodyString.indexOf("<");
 						lastIndex = newBodyString.indexOf(">");
 						newBodyString = newBodyString.replace(newBodyString.substring(firstIndex,lastIndex+1), "");}
-					newBodyString = newBodyString.substr(0,300);
-					html+="<li id="+String(i)+"><b><a href='"+hyperlink+"'>"+newTitle+"</a></b><p>"+newBodyString+"</p><br></li>"
-					//listItemInfo += '\nTitle: ' + oListItem.get_item('Title');
+					//Add HTML formatting and append to string called html that will be printed to the newsfeed.
+					html+="<li id="+String(i)+"><b>"+formatPublishDate+" "+"<a href='"+hyperlink+"'>"+newTitle+"</a></b><p>"+newBodyString+"</p><br></li>"
 				}
 				i+=1;
 			}
-			var maxItem = i-1; //6
+			var maxItem = i-1;
 			var j=1;
+			//Allow newsfeed to autoscroll.
 			function changeDisplay() {
+				//Find the jth occurence of "<li" which is where the newsfeed will begin displaying
 				var beginning = html.split("<li",j).join("<li").length;
 				var str="</li>";
 				var end;
 				var length;
+				//Set the html style as invisible
 				titleList.style.display = "none";
+				//If the first item to be displayed is the second last item in the list, put the list's first item on display.
 				if (j==maxItem-1){
 					titleList.innerHTML = html.substr(beginning,html.length)+html.substr(0,html.indexOf("</li>")+str.length);
-				} else if (j==maxItem) {
+				} else if (j==maxItem) { //If the first item to be displayed is the last item in the list, put the list's first and second item on display.
 					end = html.split("</li>",2).join("</li>").length;
 					titleList.innerHTML = html.substr(beginning,html.length)+html.substr(0,end+str.length)
-				} else {
+				} else { //All other cases, display the jth item of the list and 2 items after that.
 					end = html.split("</li>",j+2).join("</li>").length;
 					length = end - beginning;
-					titleList.innerHTML = html.substr(beginning,length+str.length);
-				}
+					titleList.innerHTML = html.substr(beginning,length+str.length);}
+				//Make the display fade in for 600ms.
 				$("#titleList").fadeIn(600);
 				j+=1;
+				//Reset j to 1, if it has exceeded the number of items in the list.
 				if (j>maxItem) {
-					j=1;
-				}
-				setTimeout(changeDisplay,4000);
-			}
+					j=1;}
+				//Change the display every 10 seconds.
+				setTimeout(changeDisplay,10000);}
 			changeDisplay();
 		}
 
+		//If query fails, produce a pop-up window with the following message.
 		function onQueryFailed(sender,args) {
-			alert('Request failed.');
+			alert('Please refresh the page.');
 		}
 		SP.SOD.executeOrDelayUntilScriptLoaded(retrieveListItems,"sp.js");}
 	</script>
